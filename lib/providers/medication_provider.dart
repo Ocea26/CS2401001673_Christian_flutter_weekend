@@ -1,31 +1,55 @@
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/medication.dart';
 
-class MedicationProvider extends ChangeNotifier {
-  final List<Medication> _medications = [
-    const Medication(
-      id: '1',
-      name: 'Vitamin D',
-      dosage: '1000 IU',
-      time: '08:00 AM',
-      notes: 'Take after breakfast.',
-    ),
-    const Medication(
-      id: '2',
-      name: 'Omega-3',
-      dosage: '2 capsules',
-      time: '12:30 PM',
-      notes: 'With lunch and water.',
-    ),
-    const Medication(
-      id: '3',
-      name: 'Calcium',
-      dosage: '500 mg',
-      time: '07:00 PM',
-      notes: 'Avoid taking with iron supplements.',
-    ),
-  ];
+class MedicationNotifier extends Notifier<List<Medication>> {
+  static const _storageKey = 'medication_reminders';
 
-  List<Medication> get medications => List.unmodifiable(_medications);
+  @override
+  List<Medication> build() => const [];
+
+  Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedValues = prefs.getStringList(_storageKey) ?? const [];
+
+    state = storedValues
+        .map((value) => Medication.fromJson(jsonDecode(value) as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> addMedication(Medication medication) async {
+    state = [...state, medication];
+    await _persist();
+  }
+
+  Future<void> toggleTaken(String id) async {
+    state = [
+      for (final medication in state)
+        if (medication.id == id)
+          medication.copyWith(taken: !medication.taken)
+        else
+          medication,
+    ];
+    await _persist();
+  }
+
+  Future<void> removeMedication(String id) async {
+    state = state.where((medication) => medication.id != id).toList();
+    await _persist();
+  }
+
+  Future<void> _persist() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _storageKey,
+      state.map((medication) => jsonEncode(medication.toJson())).toList(),
+    );
+  }
 }
+
+final medicationsProvider = NotifierProvider<MedicationNotifier, List<Medication>>(
+  MedicationNotifier.new,
+);
